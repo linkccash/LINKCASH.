@@ -1,0 +1,198 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LINKCASH - Register</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
+body{min-height:100vh;background:#050505;color:white;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{width:100%;max-width:420px;background:#111;border:1px solid #d4a72c;border-radius:18px;padding:25px}
+.logo{text-align:center;color:#d4a72c;font-size:30px;font-weight:bold;margin-bottom:10px}
+h2{text-align:center;margin-bottom:8px}
+.sub{text-align:center;color:#aaa;font-size:13px;margin-bottom:22px}
+label{display:block;margin:13px 0 7px;font-size:13px}
+input{width:100%;padding:14px;background:#080808;border:1px solid #444;border-radius:8px;color:white;outline:none}
+input:focus{border-color:#d4a72c}
+button{width:100%;padding:15px;margin-top:22px;background:#d4a72c;border:0;border-radius:8px;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.6}
+#message{margin-top:15px;text-align:center;font-size:13px;color:#ff7777}
+.login{text-align:center;margin-top:18px;color:#aaa;font-size:13px}
+a{color:#d4a72c;text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="card">
+<div class="logo">LINKCASH</div>
+<h2>CREATE ACCOUNT</h2>
+<p class="sub">Join LINKCASH Affiliate Network</p>
+
+<form id="registerForm">
+
+<label>Full Name</label>
+<input id="fullName" type="text" required placeholder="Enter full name">
+
+<label>Username</label>
+<input id="username" type="text" required minlength="3" placeholder="Choose username">
+
+<label>Email Address</label>
+<input id="email" type="email" required placeholder="Enter email">
+
+<label>Phone Number</label>
+<input id="phone" type="tel" required placeholder="Enter phone number">
+
+<label>Password</label>
+<input id="password" type="password" required minlength="6" placeholder="Create password">
+
+<label>Confirm Password</label>
+<input id="confirmPassword" type="password" required placeholder="Confirm password">
+
+<label>Referral Username (Optional)</label>
+<input id="referral" type="text" placeholder="Sponsor username">
+
+<button id="registerBtn" type="submit">CREATE ACCOUNT</button>
+<div id="message"></div>
+
+</form>
+
+<p class="login">Already have an account? <a href="login.html">Login</a></p>
+</div>
+
+<script>
+// REPLACE WITH YOUR SUPABASE DETAILS
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+const db = window.supabase.createClient(
+SUPABASE_URL,
+SUPABASE_ANON_KEY
+);
+
+const form = document.getElementById("registerForm");
+const message = document.getElementById("message");
+const button = document.getElementById("registerBtn");
+
+form.addEventListener("submit", async function(e){
+e.preventDefault();
+
+const fullName = document.getElementById("fullName").value.trim();
+const username = document.getElementById("username").value.trim().toLowerCase();
+const email = document.getElementById("email").value.trim();
+const phone = document.getElementById("phone").value.trim();
+const password = document.getElementById("password").value;
+const confirmPassword = document.getElementById("confirmPassword").value;
+const referral = document.getElementById("referral").value.trim().toLowerCase();
+
+message.style.color = "#ff7777";
+
+if(password !== confirmPassword){
+message.textContent = "Passwords do not match!";
+return;
+}
+
+if(!/^[a-z0-9_]{3,20}$/.test(username)){
+message.textContent = "Username must be 3-20 characters.";
+return;
+}
+
+button.disabled = true;
+button.textContent = "CREATING ACCOUNT...";
+message.textContent = "";
+
+try{
+
+// Check username availability
+const {data: existing, error: checkError} = await db
+.from("profiles")
+.select("id")
+.eq("username",username)
+.maybeSingle();
+
+if(checkError) throw checkError;
+
+if(existing){
+throw new Error("Username already exists.");
+}
+
+// Verify referral username
+let referrerUsername = null;
+
+if(referral){
+const {data: sponsor,error: sponsorError} = await db
+.from("profiles")
+.select("username")
+.eq("username",referral)
+.maybeSingle();
+
+if(sponsorError) throw sponsorError;
+if(!sponsor) throw new Error("Referral username not found.");
+
+referrerUsername = sponsor.username;
+}
+
+// Create authentication account
+const {data: authData,error: authError} = await db.auth.signUp({
+email:email,
+password:password,
+options:{
+data:{
+full_name:fullName,
+username:username,
+phone:phone
+}
+}
+});
+
+if(authError) throw authError;
+
+if(!authData.user){
+throw new Error("Registration failed. Try again.");
+}
+
+// Profile is created securely by Supabase database trigger.
+const {data: profile,error: profileError} = await db
+.from("profiles")
+.select("id,username,status")
+.eq("id",authData.user.id)
+.maybeSingle();
+
+if(profileError) throw profileError;
+
+if(!profile){
+throw new Error("Account created, but profile is not ready. Contact support.");
+}
+
+if(profile.status !== "pending"){
+throw new Error("Unexpected account status. Contact support.");
+}
+
+localStorage.setItem("linkcashUser",JSON.stringify({
+id:profile.id,
+username:profile.username,
+status:profile.status
+}));
+
+message.style.color="#d4a72c";
+message.textContent = "Account created successfully!";
+
+window.location.href="pending-dashboard.html";
+
+}catch(error){
+
+message.textContent = error.message || "Registration failed.";
+
+}finally{
+
+button.disabled=false;
+button.textContent="CREATE ACCOUNT";
+
+}
+
+});
+</script>
+
+</body>
+</html>
