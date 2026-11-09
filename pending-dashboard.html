@@ -1,0 +1,191 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LINKCASH - Pending Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
+body{background:#050505;color:white;min-height:100vh;padding:20px}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d4a72c;padding:15px 0}
+.logo{color:#d4a72c;font-size:25px;font-weight:bold}
+.logout{background:#292929;color:white;border:1px solid #555;padding:9px 14px;border-radius:7px}
+.container{max-width:650px;margin:30px auto}
+.card{background:#111;border:1px solid #393019;border-radius:14px;padding:22px;margin-bottom:18px}
+h2{color:#d4a72c;margin-bottom:15px}
+.status{color:#ffc94a;font-weight:bold;font-size:14px}
+.fee{font-size:32px;color:#d4a72c;font-weight:bold;margin:15px 0}
+p{color:#bbb;line-height:1.7;font-size:14px}
+label{display:block;margin:15px 0 7px}
+input,select{width:100%;padding:13px;background:#080808;border:1px solid #444;border-radius:8px;color:white}
+button.submit{width:100%;padding:14px;background:#d4a72c;border:0;border-radius:8px;font-weight:bold;margin-top:17px}
+#message{margin-top:15px;color:#d4a72c;font-size:13px}
+</style>
+</head>
+
+<body>
+
+<header>
+<div class="logo">LINKCASH</div>
+<button class="logout" onclick="logout()">LOGOUT</button>
+</header>
+
+<div class="container">
+
+<div class="card">
+<h2>Welcome, <span id="username">User</span></h2>
+<p>Your account is registered successfully.</p>
+<p style="margin-top:12px">Account Status:</p>
+<p class="status">● PENDING ACTIVATION</p>
+</div>
+
+<div class="card">
+<h2>Account Activation</h2>
+<p>Pay the activation fee and submit your payment reference for CEO verification.</p>
+<div class="fee">TZS 14,500</div>
+<p>After payment submission, your account will remain pending until the CEO verifies and activates it.</p>
+</div>
+
+<div class="card">
+<h2>Submit Payment Details</h2>
+
+<form id="paymentForm">
+
+<label>Payment Method</label>
+<select id="operator" required>
+<option value="">Select payment method</option>
+<option value="M-Pesa">M-Pesa</option>
+<option value="Airtel Money">Airtel Money</option>
+<option value="Yas">Yas</option>
+<option value="HaloPesa">HaloPesa</option>
+</select>
+
+<label>Phone Number Used for Payment</label>
+<input id="paidPhone" type="tel" required placeholder="Enter payment phone number">
+
+<label>Transaction ID / Reference</label>
+<input id="reference" type="text" required placeholder="Enter transaction reference">
+
+<label>Payment Name</label>
+<input id="paidName" type="text" required placeholder="Name used for payment">
+
+<button class="submit" id="submitBtn" type="submit">SUBMIT PAYMENT</button>
+
+<div id="message"></div>
+</form>
+</div>
+
+<div class="card">
+<h2>Important</h2>
+<p>Do not submit false transaction details. Your payment will be reviewed by the LINKCASH CEO. Never share your account password or Supabase credentials.</p>
+</div>
+
+</div>
+
+<script>
+// SUPABASE CONFIGURATION
+const SUPABASE_URL="YOUR_SUPABASE_URL";
+const SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY";
+
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+let currentUser=null;
+
+async function init(){
+
+const {data:{user},error}=await db.auth.getUser();
+
+if(error || !user){
+window.location.href="login.html";
+return;
+}
+
+const {data:profile,error:profileError}=await db
+.from("profiles")
+.select("id,username,status")
+.eq("id",user.id)
+.single();
+
+if(profileError){
+document.getElementById("message").textContent="Unable to load account.";
+return;
+}
+
+currentUser=profile;
+
+if(profile.status==="active" || profile.status==="activated"){
+window.location.href="dashboard.html";
+return;
+}
+
+if(profile.status==="rejected"){
+document.getElementById("message").textContent="Your account has been rejected. Contact CEO.";
+return;
+}
+
+document.getElementById("username").textContent=profile.username;
+
+}
+
+document.getElementById("paymentForm").addEventListener("submit",async function(e){
+
+e.preventDefault();
+
+const message=document.getElementById("message");
+const button=document.getElementById("submitBtn");
+
+if(!currentUser)return;
+
+button.disabled=true;
+button.textContent="SUBMITTING...";
+message.textContent="";
+
+try{
+
+const operator=document.getElementById("operator").value;
+const paidPhone=document.getElementById("paidPhone").value.trim();
+const reference=document.getElementById("reference").value.trim();
+const paidName=document.getElementById("paidName").value.trim();
+
+const {error}=await db.from("payments").insert({
+user_id:currentUser.id,
+username:currentUser.username,
+operator:operator,
+paid_phone:paidPhone,
+transaction_reference:reference,
+paid_name:paidName,
+amount:14500,
+status:"pending"
+});
+
+if(error)throw error;
+
+message.textContent="Payment submitted successfully. Wait for CEO verification.";
+this.reset();
+
+}catch(error){
+
+message.textContent=error.message || "Payment submission failed.";
+
+}finally{
+
+button.disabled=false;
+button.textContent="SUBMIT PAYMENT";
+
+}
+
+});
+
+async function logout(){
+await db.auth.signOut();
+window.location.href="login.html";
+}
+
+init();
+</script>
+
+</body>
+</html>
