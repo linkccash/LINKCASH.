@@ -1,0 +1,252 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LINKCASH CEO Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
+body{background:#050505;color:white;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;padding:15px 0;border-bottom:1px solid #d4a72c}
+.logo{font-size:23px;font-weight:bold;color:#d4a72c}
+button{border:0;border-radius:7px;padding:12px;font-weight:bold;cursor:pointer}
+.logout,.reject{background:#922;color:white}
+.primary,.activate{background:#d4a72c;color:#080808}
+.container{max-width:950px;margin:25px auto}
+.card{background:#111;border:1px solid #493b19;border-radius:12px;padding:18px;margin-bottom:17px}
+h2{color:#d4a72c;font-size:19px;margin-bottom:15px}
+input{width:100%;padding:13px;background:#080808;color:white;border:1px solid #444;border-radius:7px;margin:7px 0 13px}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.stat{background:#191919;padding:15px;border-radius:8px}
+.stat small{color:#aaa}
+.stat strong{display:block;font-size:23px;color:#d4a72c;margin-top:8px}
+.item{background:#191919;padding:15px;border-radius:9px;margin:10px 0;overflow-wrap:anywhere}
+.item p{color:#bbb;font-size:13px;line-height:1.8}
+.actions{display:flex;gap:8px;margin-top:12px}
+.actions button{flex:1}
+#dashboard{display:none}
+#message{color:#d4a72c;margin-top:12px;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{text-align:left;padding:10px;border-bottom:1px solid #333}
+.scroll{overflow-x:auto}
+</style>
+</head>
+<body>
+
+<header>
+<div class="logo">LINKCASH CEO</div>
+<button class="logout" onclick="logout()">LOGOUT</button>
+</header>
+
+<div class="container">
+
+<div class="card" id="loginBox">
+<h2>CEO LOGIN</h2>
+<input id="email" type="email" placeholder="CEO Email">
+<input id="password" type="password" placeholder="CEO Password">
+<button class="primary" style="width:100%" onclick="login()">LOGIN AS CEO</button>
+<div id="message"></div>
+</div>
+
+<div id="dashboard">
+
+<div class="card">
+<h2>CEO CONTROL PANEL</h2>
+<p id="welcome"></p>
+</div>
+
+<div class="stats">
+<div class="stat"><small>Total Users</small><strong id="totalUsers">0</strong></div>
+<div class="stat"><small>Pending Users</small><strong id="pendingUsers">0</strong></div>
+<div class="stat"><small>Active Users</small><strong id="activeUsers">0</strong></div>
+<div class="stat"><small>Pending Payments</small><strong id="pendingPayments">0</strong></div>
+</div>
+
+<div class="card" style="margin-top:18px">
+<h2>COMMISSION SETTINGS</h2>
+<p>Level 1: TZS 7,000</p>
+<p>Level 2: TZS 3,000</p>
+<p>Level 3: TZS 1,500</p>
+<p>Level 4: TZS 1,000</p>
+<p style="color:#aaa;margin-top:10px;font-size:12px">Total commissions: TZS 12,500 per activation.</p>
+</div>
+
+<div class="card">
+<h2>PAYMENT REQUESTS</h2>
+<div id="paymentsList">Loading...</div>
+</div>
+
+<div class="card">
+<h2>ALL USERS</h2>
+<div class="scroll">
+<table>
+<thead><tr><th>Username</th><th>Status</th><th>Role</th></tr></thead>
+<tbody id="usersList"></tbody>
+</table>
+</div>
+</div>
+
+</div>
+</div>
+
+<script>
+const SUPABASE_URL="YOUR_SUPABASE_URL";
+const SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY";
+
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+let currentCEO=null;
+
+function escapeHTML(value){
+return String(value??"").replace(/[&<>"']/g,c=>({
+"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+}[c]));
+}
+
+function msg(text){
+document.getElementById("message").textContent=text;
+}
+
+async function login(){
+const email=document.getElementById("email").value.trim();
+const password=document.getElementById("password").value;
+msg("Checking credentials...");
+
+try{
+const {data,error}=await db.auth.signInWithPassword({email,password});
+if(error)throw error;
+
+const {data:profile,error:profileError}=await db
+.from("profiles").select("id,username,role")
+.eq("id",data.user.id).single();
+
+if(profileError)throw profileError;
+if(profile.role!=="ceo"){
+await db.auth.signOut();
+throw new Error("CEO access only.");
+}
+
+currentCEO=profile;
+document.getElementById("loginBox").style.display="none";
+document.getElementById("dashboard").style.display="block";
+document.getElementById("welcome").textContent="Welcome CEO @"+profile.username;
+await loadDashboard();
+
+}catch(error){msg(error.message);}
+}
+
+async function loadDashboard(){
+try{
+const [{data:users,error:userError},{data:payments,error:paymentError}]=await Promise.all([
+db.from("profiles").select("id,username,status,role"),
+db.from("payments").select("*").order("created_at",{ascending:false})
+]);
+
+if(userError)throw userError;
+if(paymentError)throw paymentError;
+
+document.getElementById("totalUsers").textContent=users.length;
+document.getElementById("pendingUsers").textContent=users.filter(u=>u.status==="pending").length;
+document.getElementById("activeUsers").textContent=users.filter(u=>["active","activated"].includes(u.status)).length;
+document.getElementById("pendingPayments").textContent=payments.filter(p=>p.status==="pending").length;
+
+document.getElementById("usersList").innerHTML=users.map(u=>`
+<tr>
+<td>${escapeHTML(u.username)}</td>
+<td>${escapeHTML(u.status)}</td>
+<td>${escapeHTML(u.role||"user")}</td>
+</tr>`).join("");
+
+renderPayments(payments);
+
+}catch(error){
+alert("Dashboard error: "+error.message);
+}
+}
+
+function renderPayments(payments){
+const box=document.getElementById("paymentsList");
+const pending=payments.filter(p=>p.status==="pending");
+
+if(!pending.length){
+box.innerHTML="<p>No pending payments.</p>";
+return;
+}
+
+box.innerHTML=pending.map(p=>`
+<div class="item">
+<p><b>User:</b> ${escapeHTML(p.username)}</p>
+<p><b>Amount:</b> TZS ${escapeHTML(p.amount)}</p>
+<p><b>Method:</b> ${escapeHTML(p.operator)}</p>
+<p><b>Phone:</b> ${escapeHTML(p.paid_phone)}</p>
+<p><b>Name:</b> ${escapeHTML(p.paid_name)}</p>
+<p><b>Reference:</b> ${escapeHTML(p.transaction_reference)}</p>
+<div class="actions">
+<button class="activate" onclick="verifyPayment('${escapeHTML(p.id)}')">VERIFY & ACTIVATE</button>
+<button class="reject" onclick="rejectPayment('${escapeHTML(p.id)}')">REJECT</button>
+</div>
+</div>`).join("");
+}
+
+async function verifyPayment(paymentId){
+if(!confirm("Confirm that this payment has been independently verified?"))return;
+
+const {data,error}=await db.rpc("ceo_activate_payment",{
+p_payment_id:paymentId
+});
+
+if(error){
+alert("Activation failed: "+error.message);
+return;
+}
+
+alert("Payment verified and account activation processed.");
+await loadDashboard();
+}
+
+async function rejectPayment(paymentId){
+if(!confirm("Reject this payment request?"))return;
+
+const {error}=await db.from("payments")
+.update({status:"rejected"})
+.eq("id",paymentId)
+.eq("status","pending");
+
+if(error){
+alert(error.message);
+return;
+}
+
+alert("Payment rejected.");
+await loadDashboard();
+}
+
+async function logout(){
+await db.auth.signOut();
+window.location.reload();
+}
+
+async function restoreSession(){
+const {data:{user}}=await db.auth.getUser();
+if(!user)return;
+
+const {data:profile}=await db.from("profiles")
+.select("id,username,role").eq("id",user.id).maybeSingle();
+
+if(profile?.role==="ceo"){
+currentCEO=profile;
+document.getElementById("loginBox").style.display="none";
+document.getElementById("dashboard").style.display="block";
+document.getElementById("welcome").textContent="Welcome CEO @"+profile.username;
+await loadDashboard();
+}else if(profile){
+await db.auth.signOut();
+}
+}
+
+restoreSession();
+</script>
+</body>
+</html>
