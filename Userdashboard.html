@@ -1,0 +1,294 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LINKCASH - User Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
+body{background:#050505;color:white;min-height:100vh}
+header{padding:18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d4a72c}
+.logo{font-size:23px;font-weight:bold;color:#d4a72c}
+button{border:0;border-radius:8px;padding:12px;font-weight:bold;cursor:pointer}
+.logout{background:#8d2424;color:white}
+.container{max-width:900px;margin:auto;padding:18px}
+.card{background:#111;border:1px solid #393019;border-radius:13px;padding:18px;margin-bottom:17px}
+h2{color:#d4a72c;font-size:18px;margin-bottom:14px}
+.welcome{color:#aaa;margin-top:8px}
+.balance{font-size:34px;color:#d4a72c;font-weight:bold;margin:12px 0}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.stat{background:#1b1b1b;padding:15px;border-radius:9px}
+.stat small{color:#aaa}
+.stat strong{display:block;color:#d4a72c;font-size:21px;margin-top:8px}
+.linkbox{background:#080808;padding:13px;border:1px solid #444;border-radius:8px;overflow-wrap:anywhere;margin:10px 0}
+.gold{background:#d4a72c;color:#080808}
+.copy{width:100%;margin-top:8px}
+.social a{display:block;padding:13px;margin:8px 0;background:#1b1b1b;color:#d4a72c;text-decoration:none;border-radius:8px}
+.level{display:flex;justify-content:space-between;padding:13px;background:#1b1b1b;border-radius:8px;margin:8px 0}
+#message{color:#d4a72c;font-size:13px;margin-top:10px}
+input{width:100%;padding:13px;background:#080808;color:white;border:1px solid #444;border-radius:8px;margin:8px 0}
+</style>
+</head>
+<body>
+
+<header>
+<div class="logo">LINKCASH</div>
+<button class="logout" onclick="logout()">LOGOUT</button>
+</header>
+
+<div class="container">
+
+<div class="card">
+<h2>USER DASHBOARD</h2>
+<p>Welcome, <b id="username">User</b></p>
+<p class="welcome">Your LINKCASH account is active.</p>
+</div>
+
+<div class="card">
+<h2>MY BALANCE</h2>
+<div class="balance">TZS <span id="balance">0</span></div>
+<div class="stats">
+<div class="stat"><small>Total Earnings</small><strong id="earnings">0</strong></div>
+<div class="stat"><small>My Team</small><strong id="teamCount">0</strong></div>
+</div>
+</div>
+
+<div class="card">
+<h2>MY REFERRAL LINK</h2>
+<p>Share your referral link with new members.</p>
+<div class="linkbox" id="referralLink">Loading...</div>
+<button class="gold copy" onclick="copyLink()">COPY REFERRAL LINK</button>
+</div>
+
+<div class="card">
+<h2>MY TEAM - LEVEL 1 TO 4</h2>
+<div class="level"><span>Level 1</span><b>TZS 7,000</b></div>
+<div class="level"><span>Level 2</span><b>TZS 3,000</b></div>
+<div class="level"><span>Level 3</span><b>TZS 1,500</b></div>
+<div class="level"><span>Level 4</span><b>TZS 1,000</b></div>
+<div id="teamDetails"></div>
+</div>
+
+<div class="card">
+<h2>WITHDRAWAL REQUEST</h2>
+<input id="withdrawAmount" type="number" min="1" placeholder="Amount in TZS">
+<input id="withdrawPhone" type="tel" placeholder="Mobile money number">
+<select id="withdrawMethod" style="width:100%;padding:13px;background:#080808;color:white;border:1px solid #444;border-radius:8px">
+<option value="">Select payment network</option>
+<option>M-Pesa</option>
+<option>Airtel Money</option>
+<option>Yas</option>
+<option>HaloPesa</option>
+</select>
+<button class="gold copy" onclick="requestWithdrawal()">REQUEST WITHDRAWAL</button>
+<div id="message"></div>
+</div>
+
+<div class="card social">
+<h2>SOCIAL MEDIA</h2>
+<div id="socialLinks">Loading links...</div>
+</div>
+
+<div class="card">
+<h2>MY TRANSACTIONS</h2>
+<div id="transactions">Loading...</div>
+</div>
+
+</div>
+
+<script>
+// SUPABASE CONFIGURATION
+const SUPABASE_URL="YOUR_SUPABASE_URL";
+const SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY";
+
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+let currentUser=null;
+
+const money=n=>Number(n||0).toLocaleString("en-US");
+
+function escapeHTML(value){
+return String(value??"").replace(/[&<>"']/g,c=>({
+"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+}[c]));
+}
+
+async function init(){
+
+const {data:{user},error}=await db.auth.getUser();
+
+if(error||!user){
+location.href="login.html";
+return;
+}
+
+const {data:profile,error:profileError}=await db
+.from("profiles")
+.select("*")
+.eq("id",user.id)
+.single();
+
+if(profileError){
+alert("Unable to load profile: "+profileError.message);
+return;
+}
+
+if(profile.role==="ceo"){
+location.href="ceodashboard.html";
+return;
+}
+
+if(profile.status==="pending"){
+location.href="pending-dashboard.html";
+return;
+}
+
+if(profile.status!=="active"&&profile.status!=="activated"){
+await db.auth.signOut();
+location.href="login.html";
+return;
+}
+
+currentUser=profile;
+
+document.getElementById("username").textContent=profile.username;
+document.getElementById("balance").textContent=money(profile.balance);
+document.getElementById("earnings").textContent=money(profile.earnings);
+
+await Promise.all([
+loadTeam(),
+loadSocial(),
+loadTransactions()
+]);
+}
+
+async function loadTeam(){
+
+const {data:members,error}=await db
+.from("profiles")
+.select("username,full_name,created_at")
+.eq("referred_by",currentUser.username);
+
+if(error){
+document.getElementById("teamDetails").textContent="Unable to load team.";
+return;
+}
+
+document.getElementById("teamCount").textContent=members.length;
+
+document.getElementById("teamDetails").innerHTML=members.length?
+members.map(m=>`
+<div class="level">
+<span>${escapeHTML(m.username)}</span>
+<small>Level 1 member</small>
+</div>`).join("")
+:"<p style='color:#aaa;margin-top:12px'>No team members yet.</p>";
+}
+
+function copyLink(){
+const link=document.getElementById("referralLink").textContent;
+navigator.clipboard.writeText(link)
+.then(()=>alert("Referral link copied!"))
+.catch(()=>alert("Copy failed. Copy the link manually."));
+}
+
+async function loadSocial(){
+
+const {data,error}=await db
+.from("social_links")
+.select("platform,url")
+.order("platform");
+
+const box=document.getElementById("socialLinks");
+
+if(error||!data||!data.length){
+box.innerHTML="<p style='color:#aaa'>No social links available.</p>";
+return;
+}
+
+box.innerHTML=data.map(item=>`
+<a href="${escapeHTML(item.url)}" target="_blank" rel="noopener">
+${escapeHTML(item.platform)}
+</a>`).join("");
+}
+
+async function requestWithdrawal(){
+
+const amount=Number(document.getElementById("withdrawAmount").value);
+const phone=document.getElementById("withdrawPhone").value.trim();
+const method=document.getElementById("withdrawMethod").value;
+const message=document.getElementById("message");
+
+if(!Number.isFinite(amount)||amount<=0||!phone||!method){
+message.textContent="Enter valid withdrawal details.";
+return;
+}
+
+if(amount>Number(currentUser.balance)){
+message.textContent="Insufficient balance.";
+return;
+}
+
+message.textContent="Submitting request...";
+
+const {error}=await db.from("withdrawals").insert({
+user_id:currentUser.id,
+username:currentUser.username,
+amount:amount,
+phone:phone,
+operator:method,
+status:"pending"
+});
+
+if(error){
+message.textContent=error.message;
+return;
+}
+
+message.textContent="Withdrawal request submitted successfully.";
+document.getElementById("withdrawAmount").value="";
+document.getElementById("withdrawPhone").value="";
+}
+
+async function loadTransactions(){
+
+const {data,error}=await db.from("commission_records")
+.select("*")
+.eq("member_username",currentUser.username)
+.order("created_at",{ascending:false});
+
+const box=document.getElementById("transactions");
+
+if(error){
+box.textContent="Transaction history unavailable.";
+return;
+}
+
+box.innerHTML=data.length?data.map(t=>`
+<div class="level">
+<span>Level ${escapeHTML(t.level)} commission</span>
+<b>TZS ${money(t.amount)}</b>
+</div>`).join(""):"<p style='color:#aaa'>No commission transactions yet.</p>";
+}
+
+async function logout(){
+await db.auth.signOut();
+location.href="login.html";
+}
+
+// Build referral URL using the current username.
+function showReferral(){
+const url=new URL("register.html",location.href);
+url.searchParams.set("ref",currentUser.username);
+document.getElementById("referralLink").textContent=url.href;
+}
+
+init().then(()=>{
+if(currentUser)showReferral();
+});
+</script>
+
+</body>
+</html>
